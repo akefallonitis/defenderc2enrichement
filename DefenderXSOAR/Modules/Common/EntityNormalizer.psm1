@@ -186,18 +186,26 @@ function Get-NormalizedIP {
 }
 
 function Get-NormalizedFile {
+    <#
+    .SYNOPSIS
+        Normalizes File entity with official Microsoft Sentinel schema
+    .DESCRIPTION
+        File entity includes: FileHash (SHA1/SHA256/MD5), FileName, FilePath, Directory, Size, CreationTime
+    #>
     [CmdletBinding()]
     param($EntityData, $Source)
     
     $normalized = @{
         FileName        = $null
         FilePath        = $null
+        Directory       = $null
         FileHash        = @{
             MD5    = $null
             SHA1   = $null
             SHA256 = $null
         }
-        FileSize        = 0
+        Size            = 0
+        CreationTime    = $null
         FileType        = $null
         ThreatName      = $null
         Verdict         = 'Unknown'
@@ -207,9 +215,14 @@ function Get-NormalizedFile {
         'MDE' {
             $normalized.FileName = $EntityData.fileName
             $normalized.FilePath = $EntityData.filePath
+            if ($EntityData.filePath) {
+                $normalized.Directory = [System.IO.Path]::GetDirectoryName($EntityData.filePath)
+            }
             $normalized.FileHash.SHA1 = $EntityData.sha1
             $normalized.FileHash.SHA256 = $EntityData.sha256
-            $normalized.FileSize = $EntityData.size
+            $normalized.FileHash.MD5 = $EntityData.md5
+            $normalized.Size = $EntityData.size
+            $normalized.CreationTime = $EntityData.fileCreationTime
         }
         'MDO' {
             $normalized.FileName = $EntityData.fileName
@@ -222,28 +235,40 @@ function Get-NormalizedFile {
 }
 
 function Get-NormalizedURL {
+    <#
+    .SYNOPSIS
+        Normalizes URL entity with official Microsoft Sentinel schema
+    .DESCRIPTION
+        URL entity includes: Url, Host, Domain, Path, QueryString
+    #>
     [CmdletBinding()]
     param($EntityData, $Source)
     
     $normalized = @{
-        URL         = $null
+        Url         = $null
+        Host        = $null
         Domain      = $null
+        Path        = $null
+        QueryString = $null
         ThreatIntel = @{}
         Categories  = @()
     }
     
     if ($EntityData -is [string]) {
-        $normalized.URL = $EntityData
+        $normalized.Url = $EntityData
     } else {
-        $normalized.URL = $EntityData.url ?? $EntityData.uri
+        $normalized.Url = $EntityData.url ?? $EntityData.uri
     }
     
-    if ($normalized.URL) {
+    if ($normalized.Url) {
         try {
-            $uri = [System.Uri]$normalized.URL
+            $uri = [System.Uri]$normalized.Url
+            $normalized.Host = $uri.Host
             $normalized.Domain = $uri.Host
+            $normalized.Path = $uri.AbsolutePath
+            $normalized.QueryString = $uri.Query
         } catch {
-            Write-Verbose "Failed to parse URL: $($normalized.URL)"
+            Write-Verbose "Failed to parse URL: $($normalized.Url)"
         }
     }
     
@@ -251,6 +276,12 @@ function Get-NormalizedURL {
 }
 
 function Get-NormalizedProcess {
+    <#
+    .SYNOPSIS
+        Normalizes Process entity with official Microsoft Sentinel schema
+    .DESCRIPTION
+        Process entity includes: ProcessID, ProcessName, CommandLine, ParentProcess, CreationTime, ElevationToken
+    #>
     [CmdletBinding()]
     param($EntityData, $Source)
     
@@ -262,6 +293,7 @@ function Get-NormalizedProcess {
         ParentProcessId    = $null
         CreationTime       = $null
         AccountName        = $null
+        ElevationToken     = $null
     }
     
     switch ($Source) {
@@ -271,6 +303,9 @@ function Get-NormalizedProcess {
             $normalized.CommandLine = $EntityData.processCommandLine
             $normalized.CreationTime = $EntityData.processCreationTime
             $normalized.AccountName = $EntityData.accountName
+            $normalized.ElevationToken = $EntityData.elevationToken
+            $normalized.ParentProcessName = $EntityData.parentProcessFileName
+            $normalized.ParentProcessId = $EntityData.parentProcessId
         }
     }
     
@@ -308,23 +343,42 @@ function Get-NormalizedMailMessage {
 }
 
 function Get-NormalizedCloudApp {
+    <#
+    .SYNOPSIS
+        Normalizes CloudApplication entity with official Microsoft Sentinel schema
+    .DESCRIPTION
+        CloudApplication entity includes: ApplicationID, ResourceID, AppDisplayName, InstanceName, Type
+    #>
     [CmdletBinding()]
     param($EntityData, $Source)
     
     $normalized = @{
-        AppName      = $null
-        AppId        = $null
-        RiskScore    = 0
-        Categories   = @()
-        Permissions  = @()
+        ApplicationID   = $null
+        ResourceID      = $null
+        AppDisplayName  = $null
+        InstanceName    = $null
+        Type            = $null
+        AppName         = $null
+        AppId           = $null
+        RiskScore       = 0
+        Categories      = @()
+        Permissions     = @()
     }
     
     switch ($Source) {
         'MCAS' {
             $normalized.AppName = $EntityData.name
+            $normalized.AppDisplayName = $EntityData.name
             $normalized.AppId = $EntityData.id
+            $normalized.ApplicationID = $EntityData.id
             $normalized.RiskScore = $EntityData.riskScore
             $normalized.Categories = $EntityData.categories
+            $normalized.Type = $EntityData.category
+        }
+        'EntraID' {
+            $normalized.ApplicationID = $EntityData.appId
+            $normalized.AppDisplayName = $EntityData.displayName
+            $normalized.ResourceID = $EntityData.id
         }
     }
     
@@ -332,15 +386,21 @@ function Get-NormalizedCloudApp {
 }
 
 function Get-NormalizedAzureResource {
+    <#
+    .SYNOPSIS
+        Normalizes AzureResource entity with official Microsoft Sentinel schema
+    .DESCRIPTION
+        AzureResource entity includes: ResourceId, SubscriptionId, ResourceGroup, ResourceType, ResourceName
+    #>
     [CmdletBinding()]
     param($EntityData, $Source)
     
     $normalized = @{
         ResourceId       = $null
+        SubscriptionId   = $null
         ResourceName     = $null
         ResourceType     = $null
         ResourceGroup    = $null
-        Subscription     = $null
         Location         = $null
         SecurityScore    = 0
     }
@@ -351,6 +411,13 @@ function Get-NormalizedAzureResource {
             $normalized.ResourceName = $EntityData.name
             $normalized.ResourceType = $EntityData.type
             $normalized.Location = $EntityData.location
+            # Extract subscription ID and resource group from resource ID
+            if ($EntityData.id -match '/subscriptions/([^/]+)') {
+                $normalized.SubscriptionId = $Matches[1]
+            }
+            if ($EntityData.id -match '/resourceGroups/([^/]+)') {
+                $normalized.ResourceGroup = $Matches[1]
+            }
         }
     }
     
@@ -405,7 +472,7 @@ function Get-NormalizedHost {
     .SYNOPSIS
         Normalizes Host entity with official Microsoft Sentinel schema
     .DESCRIPTION
-        Host entity includes: Hostname, NetBiosName, AzureID, OMSAgentID, OSVersion
+        Host entity includes: Hostname, NetBiosName, AzureID, OMSAgentID, OSVersion, FQDN, MdatpDeviceId
     #>
     [CmdletBinding()]
     param($EntityData, $Source)
@@ -417,6 +484,8 @@ function Get-NormalizedHost {
         OMSAgentID       = $null
         OSVersion        = $null
         OSPlatform       = $null
+        FQDN             = $null
+        MdatpDeviceId    = $null
         IPAddresses      = @()
         MACAddresses     = @()
         RiskScore        = 0
@@ -426,7 +495,10 @@ function Get-NormalizedHost {
     switch ($Source) {
         'MDE' {
             $normalized.Hostname = $EntityData.computerDnsName
+            $normalized.NetBiosName = $EntityData.computerDnsName.Split('.')[0]
             $normalized.AzureID = $EntityData.azureAdDeviceId
+            $normalized.MdatpDeviceId = $EntityData.id
+            $normalized.FQDN = $EntityData.computerDnsName
             $normalized.OSVersion = $EntityData.osVersion
             $normalized.OSPlatform = $EntityData.osPlatform
             $normalized.RiskScore = if ($EntityData.riskScore) { $EntityData.riskScore } else { 0 }
@@ -452,30 +524,33 @@ function Get-NormalizedMailbox {
     .SYNOPSIS
         Normalizes Mailbox entity with official Microsoft Sentinel schema
     .DESCRIPTION
-        Mailbox entity includes: DisplayName, Alias, MailboxGuid, UPN
+        Mailbox entity includes: DisplayName, Alias, MailboxGuid, ExternalDirectoryObjectId, UserPrincipalName
     #>
     [CmdletBinding()]
     param($EntityData, $Source)
     
     $normalized = @{
-        DisplayName     = $null
-        Alias           = $null
-        MailboxGuid     = $null
-        UPN             = $null
-        PrimarySmtpAddress = $null
+        DisplayName                = $null
+        Alias                      = $null
+        MailboxGuid                = $null
+        ExternalDirectoryObjectId  = $null
+        UserPrincipalName          = $null
+        PrimarySmtpAddress         = $null
     }
     
     switch ($Source) {
         'MDO' {
             $normalized.DisplayName = $EntityData.displayName
-            $normalized.UPN = $EntityData.userPrincipalName
+            $normalized.UserPrincipalName = $EntityData.userPrincipalName
             $normalized.PrimarySmtpAddress = $EntityData.primarySmtpAddress
             $normalized.MailboxGuid = $EntityData.mailboxGuid
+            $normalized.ExternalDirectoryObjectId = $EntityData.externalDirectoryObjectId
         }
         'EntraID' {
             $normalized.DisplayName = $EntityData.displayName
-            $normalized.UPN = $EntityData.userPrincipalName
+            $normalized.UserPrincipalName = $EntityData.userPrincipalName
             $normalized.PrimarySmtpAddress = $EntityData.mail
+            $normalized.ExternalDirectoryObjectId = $EntityData.id
         }
     }
     
@@ -518,7 +593,7 @@ function Get-NormalizedDNS {
     .SYNOPSIS
         Normalizes DNS entity with official Microsoft Sentinel schema
     .DESCRIPTION
-        DNS entity includes: DomainName, DnsServerIP, QueryType, QueryResult
+        DNS entity includes: DomainName, DnsServerIP, QueryType, QueryClass, QueryResponse
     #>
     [CmdletBinding()]
     param($EntityData, $Source)
@@ -527,7 +602,8 @@ function Get-NormalizedDNS {
         DomainName      = $null
         DnsServerIP     = $null
         QueryType       = $null
-        QueryResult     = @()
+        QueryClass      = $null
+        QueryResponse   = @()
         QueryStatus     = $null
     }
     
@@ -536,7 +612,8 @@ function Get-NormalizedDNS {
             $normalized.DomainName = $EntityData.domainName
             $normalized.DnsServerIP = $EntityData.dnsServerIp
             $normalized.QueryType = $EntityData.queryType
-            $normalized.QueryResult = $EntityData.resolvedIpAddresses
+            $normalized.QueryResponse = $EntityData.resolvedIpAddresses
+            $normalized.QueryClass = 'IN'  # Default to Internet class
         }
     }
     
