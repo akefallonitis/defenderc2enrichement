@@ -153,6 +153,56 @@
       ]
     }
   },
+  "Enrichment": {
+    "ThreatIntelligence": {
+      "Enabled": true,
+      "Sources": [
+        "MicrosoftThreatIntelligence",
+        "VirusTotal",
+        "AlienVaultOTX"
+      ]
+    },
+    "GeoLocation": {
+      "Enabled": true,
+      "HighRiskCountries": ["NK", "IR", "SY", "CU", "SD"],
+      "DetectImpossibleTravel": true
+    },
+    "Reputation": {
+      "Enabled": true,
+      "LowReputationThreshold": 30
+    },
+    "BehaviorAnalytics": {
+      "Enabled": true,
+      "BaselinePeriodDays": 30,
+      "AnomalyThreshold": 2.0
+    }
+  },
+  "Correlation": {
+    "Enabled": true,
+    "TimeWindowMinutes": 60,
+    "ScenarioWeights": {
+      "EmailToEndpoint": 20,
+      "IdentityToEndpoint": 25,
+      "CloudToIdentity": 20,
+      "EndpointToNetwork": 30,
+      "FullKillChain": 50
+    }
+  },
+  "Triggers": {
+    "SentinelWebhook": {
+      "Enabled": true,
+      "MinimumSeverity": "Medium"
+    },
+    "DefenderPolling": {
+      "Enabled": false,
+      "IntervalMinutes": 5,
+      "MinimumSeverity": "Medium"
+    },
+    "ScheduledAnalysis": {
+      "Enabled": false,
+      "CronSchedule": "0 */6 * * *"
+    }
+  },
   "Logging": {
     "Level": "Information",
     "ConsoleOutput": true,
