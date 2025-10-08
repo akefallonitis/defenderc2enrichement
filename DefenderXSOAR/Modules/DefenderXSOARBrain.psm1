@@ -10,11 +10,19 @@ $ModulePath = $PSScriptRoot
 $CommonPath = Join-Path $ModulePath "Common"
 $WorkersPath = Join-Path $ModulePath "Workers"
 $PlaybooksPath = Join-Path $ModulePath "Playbooks"
+$EnrichmentPath = Join-Path $ModulePath "Enrichment"
 
 # Import Common modules
 Import-Module (Join-Path $CommonPath "AuthenticationHelper.psm1") -Force
 Import-Module (Join-Path $CommonPath "EntityNormalizer.psm1") -Force
 Import-Module (Join-Path $CommonPath "DataTableManager.psm1") -Force
+Import-Module (Join-Path $CommonPath "CrossCorrelationEngine.psm1") -Force
+
+# Import Enrichment modules
+Import-Module (Join-Path $EnrichmentPath "ThreatIntelEnrichment.psm1") -Force
+Import-Module (Join-Path $EnrichmentPath "GeoLocationEnrichment.psm1") -Force
+Import-Module (Join-Path $EnrichmentPath "ReputationEnrichment.psm1") -Force
+Import-Module (Join-Path $EnrichmentPath "BehaviorAnalytics.psm1") -Force
 
 # Import Worker modules
 Import-Module (Join-Path $WorkersPath "MDEWorker.psm1") -Force
@@ -179,6 +187,89 @@ function Start-DefenderXSOAREnrichment {
             }
         }
         
+        # Perform advanced enrichments
+        Write-Host "`n=== Performing Advanced Enrichment ===" -ForegroundColor Cyan
+        
+        # Threat Intelligence Enrichment
+        Write-Host "Running Threat Intelligence enrichment..." -ForegroundColor Cyan
+        try {
+            $graphToken = Get-GraphToken -TenantId $tenant.TenantId -ClientId $tenant.ClientId -ClientSecret $tenant.ClientSecret
+            $threatIntelResults = Invoke-ThreatIntelEnrichment -Entities $consolidatedResults.Entities -AccessToken $graphToken
+            $consolidatedResults.ThreatIntel += $threatIntelResults.ThreatIndicators
+            $consolidatedResults.RiskScore += $threatIntelResults.OverallRiskScore
+            Write-Host "  ✓ Threat Intel enrichment completed" -ForegroundColor Green
+        }
+        catch {
+            Write-Warning "  ✗ Threat Intel enrichment failed: $_"
+        }
+        
+        # GeoLocation Enrichment
+        Write-Host "Running GeoLocation enrichment..." -ForegroundColor Cyan
+        try {
+            $geoResults = Invoke-GeoLocationEnrichment -Entities $consolidatedResults.Entities
+            $consolidatedResults.RiskScore += $geoResults.RiskScore
+            if ($geoResults.AnomalousLocations.Count -gt 0) {
+                $consolidatedResults.Recommendations += "Anomalous geographic locations detected: $($geoResults.AnomalousLocations.Count) instances"
+            }
+            Write-Host "  ✓ GeoLocation enrichment completed" -ForegroundColor Green
+        }
+        catch {
+            Write-Warning "  ✗ GeoLocation enrichment failed: $_"
+        }
+        
+        # Reputation Enrichment
+        Write-Host "Running Reputation enrichment..." -ForegroundColor Cyan
+        try {
+            $mdeToken = Get-MDEToken -TenantId $tenant.TenantId -ClientId $tenant.ClientId -ClientSecret $tenant.ClientSecret
+            $repResults = Invoke-ReputationEnrichment -Entities $consolidatedResults.Entities -AccessToken $mdeToken
+            $consolidatedResults.RiskScore += $repResults.OverallRiskScore
+            if ($repResults.LowReputationItems.Count -gt 0) {
+                $consolidatedResults.Recommendations += "Low reputation items detected: $($repResults.LowReputationItems.Count) instances"
+            }
+            Write-Host "  ✓ Reputation enrichment completed" -ForegroundColor Green
+        }
+        catch {
+            Write-Warning "  ✗ Reputation enrichment failed: $_"
+        }
+        
+        # Behavior Analytics
+        Write-Host "Running Behavior Analytics..." -ForegroundColor Cyan
+        try {
+            $behaviorResults = Invoke-BehaviorAnalytics -Entities $consolidatedResults.Entities -BaselinePeriodDays 30
+            $consolidatedResults.UEBAInsights += $behaviorResults.BehavioralAnomalies
+            $consolidatedResults.RiskScore += $behaviorResults.RiskScore
+            Write-Host "  ✓ Behavior Analytics completed" -ForegroundColor Green
+        }
+        catch {
+            Write-Warning "  ✗ Behavior Analytics failed: $_"
+        }
+        
+        # Cross-Product Correlation
+        Write-Host "`n=== Running Cross-Product Correlation ===" -ForegroundColor Cyan
+        try {
+            $correlationResults = Invoke-CrossProductCorrelation -ProductResults $consolidatedResults.ProductResults -TimeWindow 60
+            $consolidatedResults.Correlations = $correlationResults
+            $consolidatedResults.RiskScore += $correlationResults.CorrelationScore
+            
+            Write-Host "Correlation Results:" -ForegroundColor Yellow
+            Write-Host "  Email→Endpoint: $($correlationResults.EmailToEndpoint.Count)"
+            Write-Host "  Identity→Endpoint: $($correlationResults.IdentityToEndpoint.Count)"
+            Write-Host "  Cloud→Identity: $($correlationResults.CloudToIdentity.Count)"
+            Write-Host "  Endpoint→Network: $($correlationResults.EndpointToNetwork.Count)"
+            Write-Host "  Full Kill Chain: $($correlationResults.FullKillChain.Count)"
+            Write-Host "  Correlation Score: $($correlationResults.CorrelationScore)"
+            Write-Host "  Risk Level: $($correlationResults.RiskLevel)"
+            
+            if ($correlationResults.CorrelationScore -gt 0) {
+                $consolidatedResults.Recommendations += "Multi-product attack correlation detected with risk level: $($correlationResults.RiskLevel)"
+            }
+            
+            Write-Host "  ✓ Cross-product correlation completed" -ForegroundColor Green
+        }
+        catch {
+            Write-Warning "  ✗ Cross-product correlation failed: $_"
+        }
+        
         # Calculate final risk score and severity
         $consolidatedResults = Invoke-RiskScoring -Results $consolidatedResults
         
@@ -189,27 +280,33 @@ function Start-DefenderXSOAREnrichment {
         
         # Send data to Log Analytics
         if ($script:Config.LogAnalytics.Enabled) {
-            Write-Host "`nSending data to Log Analytics..." -ForegroundColor Cyan
+            Write-Host "`nSending data to Log Analytics custom tables..." -ForegroundColor Cyan
             
-            $logAnalyticsParams = @{
-                WorkspaceId   = $script:Config.LogAnalytics.WorkspaceId
-                SharedKey     = $script:Config.LogAnalytics.SharedKey
-                IncidentId    = $IncidentId
-                IncidentArmId = $IncidentArmId
-                Product       = "DefenderXSOAR"
-                EnrichmentData = $consolidatedResults
-                AddComment    = $true
-            }
-            
+            $mgmtToken = $null
             if ($IncidentArmId) {
                 $mgmtToken = Get-AzureManagementToken -TenantId $tenant.TenantId -ClientId $tenant.ClientId -ClientSecret $tenant.ClientSecret
-                $logAnalyticsParams.AccessToken = $mgmtToken
             }
             
-            $dataResult = Send-DefenderXSOARData @logAnalyticsParams
+            # Add decision to consolidated results
+            $consolidatedResults.Decision = $decision
             
-            if ($dataResult.Success) {
-                Write-Host "  ✓ Data sent successfully" -ForegroundColor Green
+            # Send to all custom tables
+            $allDataResult = Send-AllDefenderXSOARData `
+                -WorkspaceId $script:Config.LogAnalytics.WorkspaceId `
+                -SharedKey $script:Config.LogAnalytics.SharedKey `
+                -IncidentId $IncidentId `
+                -IncidentArmId $IncidentArmId `
+                -EnrichmentResults $consolidatedResults `
+                -AccessToken $mgmtToken `
+                -AddComment $true
+            
+            if ($allDataResult) {
+                Write-Host "  ✓ Data sent to all custom tables:" -ForegroundColor Green
+                Write-Host "    • DefenderXSOAR_CL (Main enrichment data)" -ForegroundColor Gray
+                Write-Host "    • DefenderXSOAR_Entities_CL (Entity details)" -ForegroundColor Gray
+                Write-Host "    • DefenderXSOAR_Correlations_CL (Cross-product correlations)" -ForegroundColor Gray
+                Write-Host "    • DefenderXSOAR_Decisions_CL (Incident decisions)" -ForegroundColor Gray
+                Write-Host "    • DefenderXSOAR_Playbooks_CL (Playbook results)" -ForegroundColor Gray
             }
         }
         
