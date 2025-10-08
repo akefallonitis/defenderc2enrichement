@@ -340,6 +340,236 @@ function Send-DefenderXSOARData {
     }
 }
 
+function Send-EntityData {
+    <#
+    .SYNOPSIS
+        Sends entity enrichment data to DefenderXSOAR_Entities_CL table
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$WorkspaceId,
+        [string]$SharedKey,
+        [string]$IncidentId,
+        [array]$Entities
+    )
+    
+    $records = @()
+    foreach ($entity in $Entities) {
+        $records += @{
+            TimeGenerated   = Get-Date -Format "o"
+            IncidentId      = $IncidentId
+            EntityType      = $entity.EntityType
+            EntityValue     = ($entity.NormalizedData | ConvertTo-Json -Compress)
+            Source          = $entity.Source
+            CorrelationId   = $entity.CorrelationId
+            RawData         = ($entity.RawData | ConvertTo-Json -Compress)
+        }
+    }
+    
+    if ($records.Count -gt 0) {
+        $jsonBody = $records | ConvertTo-Json -Depth 10
+        Send-ToLogAnalytics -WorkspaceId $WorkspaceId -SharedKey $SharedKey -LogType "DefenderXSOAR_Entities" -JsonBody $jsonBody
+    }
+}
+
+function Send-CorrelationData {
+    <#
+    .SYNOPSIS
+        Sends correlation data to DefenderXSOAR_Correlations_CL table
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$WorkspaceId,
+        [string]$SharedKey,
+        [string]$IncidentId,
+        [hashtable]$Correlations
+    )
+    
+    $records = @()
+    
+    # Email to Endpoint correlations
+    foreach ($corr in $Correlations.EmailToEndpoint) {
+        $records += @{
+            TimeGenerated   = Get-Date -Format "o"
+            IncidentId      = $IncidentId
+            CorrelationType = 'EmailToEndpoint'
+            Description     = $corr.Description
+            RiskScore       = $corr.RiskScore
+            Severity        = $corr.Severity
+            Details         = ($corr | ConvertTo-Json -Compress)
+        }
+    }
+    
+    # Identity to Endpoint correlations
+    foreach ($corr in $Correlations.IdentityToEndpoint) {
+        $records += @{
+            TimeGenerated   = Get-Date -Format "o"
+            IncidentId      = $IncidentId
+            CorrelationType = 'IdentityToEndpoint'
+            Description     = $corr.Description
+            RiskScore       = $corr.RiskScore
+            Severity        = $corr.Severity
+            Details         = ($corr | ConvertTo-Json -Compress)
+        }
+    }
+    
+    # Add other correlation types...
+    foreach ($corr in ($Correlations.CloudToIdentity + $Correlations.EndpointToNetwork + $Correlations.FullKillChain)) {
+        if ($corr) {
+            $records += @{
+                TimeGenerated   = Get-Date -Format "o"
+                IncidentId      = $IncidentId
+                CorrelationType = $corr.Type
+                Description     = $corr.Description
+                RiskScore       = $corr.RiskScore
+                Severity        = $corr.Severity
+                Details         = ($corr | ConvertTo-Json -Compress)
+            }
+        }
+    }
+    
+    if ($records.Count -gt 0) {
+        $jsonBody = $records | ConvertTo-Json -Depth 10
+        Send-ToLogAnalytics -WorkspaceId $WorkspaceId -SharedKey $SharedKey -LogType "DefenderXSOAR_Correlations" -JsonBody $jsonBody
+    }
+}
+
+function Send-DecisionData {
+    <#
+    .SYNOPSIS
+        Sends incident decision data to DefenderXSOAR_Decisions_CL table
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$WorkspaceId,
+        [string]$SharedKey,
+        [string]$IncidentId,
+        [hashtable]$Decision
+    )
+    
+    $record = @{
+        TimeGenerated   = Get-Date -Format "o"
+        IncidentId      = $IncidentId
+        Action          = $Decision.Action
+        Priority        = $Decision.Priority
+        Confidence      = $Decision.Confidence
+        Reasoning       = $Decision.Reasoning
+        AutomatedAction = $Decision.AutomatedAction
+        DecisionFactors = ($Decision.Factors | ConvertTo-Json -Compress)
+    }
+    
+    $jsonBody = @($record) | ConvertTo-Json -Depth 10
+    Send-ToLogAnalytics -WorkspaceId $WorkspaceId -SharedKey $SharedKey -LogType "DefenderXSOAR_Decisions" -JsonBody $jsonBody
+}
+
+function Send-PlaybookData {
+    <#
+    .SYNOPSIS
+        Sends playbook execution data to DefenderXSOAR_Playbooks_CL table
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$WorkspaceId,
+        [string]$SharedKey,
+        [string]$IncidentId,
+        [string]$Product,
+        [array]$PlaybookResults
+    )
+    
+    $records = @()
+    foreach ($result in $PlaybookResults) {
+        $records += @{
+            TimeGenerated   = Get-Date -Format "o"
+            IncidentId      = $IncidentId
+            Product         = $Product
+            PlaybookName    = $result.PlaybookName
+            ExecutionStatus = $result.Status ?? 'Completed'
+            ResultCount     = $result.ResultCount ?? 0
+            QueryExecuted   = $result.Query ?? ''
+            Results         = ($result.Results | ConvertTo-Json -Compress)
+        }
+    }
+    
+    if ($records.Count -gt 0) {
+        $jsonBody = $records | ConvertTo-Json -Depth 10
+        Send-ToLogAnalytics -WorkspaceId $WorkspaceId -SharedKey $SharedKey -LogType "DefenderXSOAR_Playbooks" -JsonBody $jsonBody
+    }
+}
+
+function Send-AllDefenderXSOARData {
+    <#
+    .SYNOPSIS
+        Sends all DefenderXSOAR data to multiple custom tables
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$WorkspaceId,
+        [string]$SharedKey,
+        [string]$IncidentId,
+        [string]$IncidentArmId,
+        [hashtable]$EnrichmentResults,
+        [string]$AccessToken,
+        [bool]$AddComment = $true
+    )
+    
+    try {
+        # Send main enrichment data
+        Send-DefenderXSOARData `
+            -WorkspaceId $WorkspaceId `
+            -SharedKey $SharedKey `
+            -IncidentId $IncidentId `
+            -IncidentArmId $IncidentArmId `
+            -Product 'All' `
+            -EnrichmentData $EnrichmentResults `
+            -AccessToken $AccessToken `
+            -AddComment $AddComment
+        
+        # Send entity data
+        if ($EnrichmentResults.Entities -and $EnrichmentResults.Entities.Count -gt 0) {
+            Send-EntityData `
+                -WorkspaceId $WorkspaceId `
+                -SharedKey $SharedKey `
+                -IncidentId $IncidentId `
+                -Entities $EnrichmentResults.Entities
+        }
+        
+        # Send correlation data
+        if ($EnrichmentResults.Correlations) {
+            Send-CorrelationData `
+                -WorkspaceId $WorkspaceId `
+                -SharedKey $SharedKey `
+                -IncidentId $IncidentId `
+                -Correlations $EnrichmentResults.Correlations
+        }
+        
+        # Send decision data
+        if ($EnrichmentResults.Decision) {
+            Send-DecisionData `
+                -WorkspaceId $WorkspaceId `
+                -SharedKey $SharedKey `
+                -IncidentId $IncidentId `
+                -Decision $EnrichmentResults.Decision
+        }
+        
+        # Send playbook data
+        if ($EnrichmentResults.KQLQueryResults -and $EnrichmentResults.KQLQueryResults.Count -gt 0) {
+            Send-PlaybookData `
+                -WorkspaceId $WorkspaceId `
+                -SharedKey $SharedKey `
+                -IncidentId $IncidentId `
+                -Product 'All' `
+                -PlaybookResults $EnrichmentResults.KQLQueryResults
+        }
+        
+        Write-Host "All DefenderXSOAR data sent to custom tables" -ForegroundColor Green
+        return $true
+    }
+    catch {
+        Write-Error "Failed to send all DefenderXSOAR data: $_"
+        return $false
+    }
+}
+
 # Export module members
 Export-ModuleMember -Function @(
     'Send-ToLogAnalytics',
@@ -347,5 +577,10 @@ Export-ModuleMember -Function @(
     'Format-EnrichmentResult',
     'ConvertTo-IncidentComment',
     'New-DefenderXSOARRecord',
-    'Send-DefenderXSOARData'
+    'Send-DefenderXSOARData',
+    'Send-EntityData',
+    'Send-CorrelationData',
+    'Send-DecisionData',
+    'Send-PlaybookData',
+    'Send-AllDefenderXSOARData'
 )
