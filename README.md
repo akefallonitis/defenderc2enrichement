@@ -16,11 +16,12 @@ Deploy DefenderXSOAR to Azure in minutes with our one-click deployment:
 
 DefenderXSOAR is a comprehensive orchestration platform that:
 - **Integrates** all Microsoft Defender products (MDE, MDC, MCAS, MDI, MDO, Entra ID)
-- **Normalizes** entities across different security products
+- **Normalizes** entities across different security products using official Microsoft Sentinel entity schemas
 - **Calculates** risk scores using advanced algorithms
 - **Automates** incident response decisions
 - **Supports** multi-tenant MSSP scenarios
 - **Provides** production-ready hunting playbooks with real KQL queries
+- **Uses** direct Microsoft API calls (no Logic Apps connectors required)
 
 ## 🏗️ Architecture
 
@@ -55,7 +56,7 @@ DefenderXSOAR/
     ├── createUiDefinition.json         # Azure Portal UI
     ├── Deploy-DefenderXSOAR.ps1        # Legacy deployment script
     ├── Deploy-DefenderXSOARCode.ps1    # Code deployment
-    ├── Grant-DefenderXSOARPermissions.ps1  # Permission setup
+    ├── Grant-DefenderXSOARPermissions.ps1  # Permission setup (✅ Included)
     ├── Configure-DefenderXSOAR.ps1     # Post-deployment config
     ├── Test-DefenderXSOAR.ps1          # Validation tests
     ├── Create-MultiTenantApp.ps1       # MSSP app registration
@@ -65,6 +66,9 @@ DefenderXSOAR/
         ├── Prerequisites.md
         ├── Permissions.md
         ├── Architecture.md
+        ├── Deployment.md               # ✅ New: Complete deployment guide
+        ├── Configuration.md            # ✅ New: Configuration guide
+        ├── API-Reference.md            # ✅ New: API documentation
         ├── Troubleshooting.md
         └── Upgrade.md
 ```
