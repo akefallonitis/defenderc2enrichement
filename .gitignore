@@ -1,0 +1,64 @@
+# DefenderXSOAR Gitignore
+
+# Configuration files with secrets
+DefenderXSOAR/Config/DefenderXSOAR-Deployed.json
+DefenderXSOAR/Config/TenantConfigs/*.json
+!DefenderXSOAR/Config/TenantConfigs/README.md
+
+# Logs
+DefenderXSOAR/Logs/
+*.log
+
+# PowerShell
+*.ps1xml
+
+# Temporary files
+*.tmp
+*.temp
+~$*
+
+# Build artifacts
+*.zip
+*.tar.gz
+
+# IDE
+.vscode/
+.vs/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Azure
+*.publishsettings
+.azure/
+
+# Credentials
+*.pfx
+*.p12
+*.key
+*.pem
+secrets/
+credentials/
+
+# Test data
+test-data/
+*.test.json
+
+# Node modules (if any)
+node_modules/
+
+# Python (if any)
+__pycache__/
+*.py[cod]
+.pytest_cache/
+venv/
+.env
+
+# Backup files
+*.bak
+*.backup
+*~
