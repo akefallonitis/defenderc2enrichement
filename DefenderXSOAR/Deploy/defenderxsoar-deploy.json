@@ -1,0 +1,227 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "DefenderXSOARName": {
+            "type": "string",
+            "defaultValue": "DefenderXSOAR",
+            "metadata": {
+                "description": "Name of the DefenderXSOAR deployment"
+            }
+        },
+        "SentinelWorkspaceName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the Sentinel Log Analytics workspace"
+            }
+        },
+        "SentinelResourceGroupName": {
+            "type": "string",
+            "metadata": {
+                "description": "Resource group containing the Sentinel workspace"
+            }
+        },
+        "MultiTenantAppId": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Application ID of the multi-tenant app registration for MSSP scenarios (optional)"
+            }
+        },
+        "MultiTenantAppSecret": {
+            "type": "securestring",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Client secret for the multi-tenant app registration (optional)"
+            }
+        },
+        "Location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]",
+            "metadata": {
+                "description": "Location for all resources"
+            }
+        },
+        "FunctionAppSku": {
+            "type": "string",
+            "defaultValue": "Y1",
+            "allowedValues": [
+                "Y1",
+                "EP1",
+                "EP2",
+                "EP3"
+            ],
+            "metadata": {
+                "description": "SKU for Function App (Y1=Consumption, EP=Premium)"
+            }
+        }
+    },
+    "variables": {
+        "functionAppName": "[concat(parameters('DefenderXSOARName'), '-func-', uniqueString(resourceGroup().id))]",
+        "storageAccountName": "[concat('defxsoar', uniqueString(resourceGroup().id))]",
+        "keyVaultName": "[concat(parameters('DefenderXSOARName'), '-kv-', uniqueString(resourceGroup().id))]",
+        "appInsightsName": "[concat(parameters('DefenderXSOARName'), '-ai-', uniqueString(resourceGroup().id))]",
+        "hostingPlanName": "[concat(parameters('DefenderXSOARName'), '-plan-', uniqueString(resourceGroup().id))]",
+        "workspaceResourceId": "[resourceId(parameters('SentinelResourceGroupName'), 'Microsoft.OperationalInsights/workspaces', parameters('SentinelWorkspaceName'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2022-09-01",
+            "name": "[variables('storageAccountName')]",
+            "location": "[parameters('Location')]",
+            "sku": {
+                "name": "Standard_LRS"
+            },
+            "kind": "StorageV2",
+            "properties": {
+                "supportsHttpsTrafficOnly": true,
+                "minimumTlsVersion": "TLS1_2",
+                "allowBlobPublicAccess": false
+            }
+        },
+        {
+            "type": "Microsoft.Insights/components",
+            "apiVersion": "2020-02-02",
+            "name": "[variables('appInsightsName')]",
+            "location": "[parameters('Location')]",
+            "kind": "web",
+            "properties": {
+                "Application_Type": "web",
+                "WorkspaceResourceId": "[variables('workspaceResourceId')]",
+                "publicNetworkAccessForIngestion": "Enabled",
+                "publicNetworkAccessForQuery": "Enabled"
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults",
+            "apiVersion": "2022-07-01",
+            "name": "[variables('keyVaultName')]",
+            "location": "[parameters('Location')]",
+            "properties": {
+                "sku": {
+                    "family": "A",
+                    "name": "standard"
+                },
+                "tenantId": "[subscription().tenantId]",
+                "enabledForDeployment": false,
+                "enabledForDiskEncryption": false,
+                "enabledForTemplateDeployment": true,
+                "enableSoftDelete": true,
+                "softDeleteRetentionInDays": 90,
+                "enableRbacAuthorization": true
+            }
+        },
+        {
+            "type": "Microsoft.Web/serverfarms",
+            "apiVersion": "2022-03-01",
+            "name": "[variables('hostingPlanName')]",
+            "location": "[parameters('Location')]",
+            "sku": {
+                "name": "[parameters('FunctionAppSku')]"
+            },
+            "kind": "functionapp",
+            "properties": {
+                "reserved": false
+            }
+        },
+        {
+            "type": "Microsoft.Web/sites",
+            "apiVersion": "2022-03-01",
+            "name": "[variables('functionAppName')]",
+            "location": "[parameters('Location')]",
+            "kind": "functionapp",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+                "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]",
+                "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]"
+            ],
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
+                "siteConfig": {
+                    "appSettings": [
+                        {
+                            "name": "AzureWebJobsStorage",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';EndpointSuffix=', environment().suffixes.storage, ';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2022-09-01').keys[0].value)]"
+                        },
+                        {
+                            "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';EndpointSuffix=', environment().suffixes.storage, ';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2022-09-01').keys[0].value)]"
+                        },
+                        {
+                            "name": "WEBSITE_CONTENTSHARE",
+                            "value": "[toLower(variables('functionAppName'))]"
+                        },
+                        {
+                            "name": "FUNCTIONS_EXTENSION_VERSION",
+                            "value": "~4"
+                        },
+                        {
+                            "name": "FUNCTIONS_WORKER_RUNTIME",
+                            "value": "powershell"
+                        },
+                        {
+                            "name": "FUNCTIONS_WORKER_RUNTIME_VERSION",
+                            "value": "7.2"
+                        },
+                        {
+                            "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+                            "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').InstrumentationKey]"
+                        },
+                        {
+                            "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                            "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]"
+                        },
+                        {
+                            "name": "KeyVaultName",
+                            "value": "[variables('keyVaultName')]"
+                        },
+                        {
+                            "name": "SentinelWorkspaceId",
+                            "value": "[reference(variables('workspaceResourceId'), '2022-10-01').customerId]"
+                        },
+                        {
+                            "name": "MultiTenantAppId",
+                            "value": "[parameters('MultiTenantAppId')]"
+                        }
+                    ],
+                    "powerShellVersion": "7.2",
+                    "use32BitWorkerProcess": false,
+                    "ftpsState": "Disabled",
+                    "minTlsVersion": "1.2"
+                },
+                "httpsOnly": true
+            }
+        }
+    ],
+    "outputs": {
+        "functionAppName": {
+            "type": "string",
+            "value": "[variables('functionAppName')]"
+        },
+        "functionAppPrincipalId": {
+            "type": "string",
+            "value": "[reference(resourceId('Microsoft.Web/sites', variables('functionAppName')), '2022-03-01', 'full').identity.principalId]"
+        },
+        "storageAccountName": {
+            "type": "string",
+            "value": "[variables('storageAccountName')]"
+        },
+        "keyVaultName": {
+            "type": "string",
+            "value": "[variables('keyVaultName')]"
+        },
+        "appInsightsName": {
+            "type": "string",
+            "value": "[variables('appInsightsName')]"
+        },
+        "appInsightsInstrumentationKey": {
+            "type": "string",
+            "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').InstrumentationKey]"
+        }
+    }
+}

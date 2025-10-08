@@ -2,8 +2,15 @@
 
 [![PowerShell](https://img.shields.io/badge/PowerShell-7.0%2B-blue.svg)](https://github.com/PowerShell/PowerShell)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fakefallonitis%2Fdefenderc2enrichement%2Fmain%2FDefenderXSOAR%2FDeploy%2Fdefenderxsoar-deploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fakefallonitis%2Fdefenderc2enrichement%2Fmain%2FDefenderXSOAR%2FDeploy%2FcreateUiDefinition.json)
 
 A production-ready, enterprise-grade Security Orchestration, Automation, and Response (SOAR) platform that consolidates Microsoft Defender product capabilities with advanced risk scoring, entity normalization, and multi-tenant support for MSSP environments.
+
+## 🚀 Quick Deploy
+
+Deploy DefenderXSOAR to Azure in minutes with our one-click deployment:
+
+**[📘 Complete Deployment Guide](DefenderXSOAR/Deploy/README.md)** | **[🔧 Prerequisites](DefenderXSOAR/Deploy/Documentation/Prerequisites.md)** | **[📖 Architecture](DefenderXSOAR/Deploy/Documentation/Architecture.md)**
 
 ## 🎯 Overview
 
@@ -44,8 +51,22 @@ DefenderXSOAR/
 ├── Config/
 │   └── DefenderXSOAR.json              # Configuration template
 └── Deploy/
-    ├── Deploy-DefenderXSOAR.ps1        # Deployment script
-    └── GrantPermissions.ps1            # Permission setup guide
+    ├── defenderxsoar-deploy.json       # ARM template
+    ├── createUiDefinition.json         # Azure Portal UI
+    ├── Deploy-DefenderXSOAR.ps1        # Legacy deployment script
+    ├── Deploy-DefenderXSOARCode.ps1    # Code deployment
+    ├── Grant-DefenderXSOARPermissions.ps1  # Permission setup
+    ├── Configure-DefenderXSOAR.ps1     # Post-deployment config
+    ├── Test-DefenderXSOAR.ps1          # Validation tests
+    ├── Create-MultiTenantApp.ps1       # MSSP app registration
+    ├── Grant-CustomerConsent.ps1       # Customer consent workflow
+    ├── Setup-Monitoring.ps1            # Monitoring configuration
+    └── Documentation/                   # Complete documentation
+        ├── Prerequisites.md
+        ├── Permissions.md
+        ├── Architecture.md
+        ├── Troubleshooting.md
+        └── Upgrade.md
 ```
 
 ## 🚀 Features
@@ -121,6 +142,33 @@ DefenderXSOAR/
 - Workbook-ready data structure
 - 90-day retention by default
 
+## 🚀 Quick Start - Deploy to Azure
+
+Deploy DefenderXSOAR to Azure in minutes with our comprehensive deployment package:
+
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fakefallonitis%2Fdefenderc2enrichement%2Fmain%2FDefenderXSOAR%2FDeploy%2Fdefenderxsoar-deploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fakefallonitis%2Fdefenderc2enrichement%2Fmain%2FDefenderXSOAR%2FDeploy%2FcreateUiDefinition.json)
+
+### What Gets Deployed
+- ✅ Azure Function App (PowerShell 7.2 runtime)
+- ✅ Storage Account (Standard_LRS)
+- ✅ Key Vault (RBAC-enabled, soft delete)
+- ✅ Application Insights (linked to Sentinel)
+- ✅ System-Assigned Managed Identity
+- ✅ Pre-configured application settings
+
+### Deployment Time
+- **ARM Template**: ~5 minutes
+- **Post-deployment scripts**: ~20 minutes
+- **Total**: ~30 minutes
+
+### Cost Estimate
+- **Consumption Plan**: $30-130/month
+- **Premium EP1**: $215-318/month
+
+**📘 [Complete Deployment Guide](DefenderXSOAR/Deploy/README.md)** | **[Prerequisites](DefenderXSOAR/Deploy/Documentation/Prerequisites.md)** | **[Troubleshooting](DefenderXSOAR/Deploy/Documentation/Troubleshooting.md)**
+
+---
+
 ## 📋 Prerequisites
 
 - PowerShell 7.0 or later
@@ -152,7 +200,7 @@ cd defenderc2enrichement/DefenderXSOAR
 ### 3. Grant API Permissions
 
 ```powershell
-.\Deploy\GrantPermissions.ps1 `
+.\Deploy\Grant-DefenderXSOARPermissions.ps1 `
     -ApplicationId "your-app-id" `
     -TenantId "your-tenant-id"
 ```

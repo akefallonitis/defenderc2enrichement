@@ -2,20 +2,30 @@
 .SYNOPSIS
     Grant Required API Permissions for DefenderXSOAR
 .DESCRIPTION
-    Grants all required API permissions to the DefenderXSOAR service principal
+    Grants all required API permissions to the DefenderXSOAR service principal or managed identity
 .PARAMETER ApplicationId
-    Application (Client) ID
+    Application (Client) ID (for app registration)
 .PARAMETER TenantId
     Azure AD Tenant ID
+.PARAMETER FunctionAppName
+    Function App name (for managed identity)
+.PARAMETER ResourceGroupName
+    Resource Group name (for managed identity)
 #>
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $false)]
     [string]$ApplicationId,
     
     [Parameter(Mandatory = $true)]
-    [string]$TenantId
+    [string]$TenantId,
+
+    [Parameter(Mandatory = $false)]
+    [string]$FunctionAppName,
+    
+    [Parameter(Mandatory = $false)]
+    [string]$ResourceGroupName
 )
 
 Write-Host @"
@@ -24,36 +34,94 @@ Write-Host @"
 ╚═══════════════════════════════════════════════════════════════════╝
 "@ -ForegroundColor Cyan
 
-# Required API Permissions
+# Determine if using managed identity or app registration
+if ($FunctionAppName -and $ResourceGroupName) {
+    Write-Host "`nUsing Function App Managed Identity..." -ForegroundColor Yellow
+    
+    # Check for required modules
+    if (-not (Get-Module -ListAvailable -Name Az.Accounts)) {
+        Write-Host "Installing Az.Accounts module..." -ForegroundColor Yellow
+        Install-Module -Name Az.Accounts -Force -AllowClobber -Scope CurrentUser
+    }
+    
+    Import-Module Az.Accounts -Force
+    
+    # Connect to Azure if not already connected
+    $context = Get-AzContext
+    if (-not $context) {
+        Connect-AzAccount -TenantId $TenantId
+    }
+    
+    # Get Function App managed identity
+    $functionApp = Get-AzWebApp -ResourceGroupName $ResourceGroupName -Name $FunctionAppName
+    if (-not $functionApp) {
+        Write-Error "Function App '$FunctionAppName' not found in resource group '$ResourceGroupName'"
+        exit 1
+    }
+    
+    if (-not $functionApp.Identity -or $functionApp.Identity.Type -ne "SystemAssigned") {
+        Write-Error "Function App does not have a system-assigned managed identity enabled"
+        exit 1
+    }
+    
+    $principalId = $functionApp.Identity.PrincipalId
+    Write-Host "  ✓ Found managed identity: $principalId" -ForegroundColor Green
+    $ApplicationId = $principalId
+}
+elseif ($ApplicationId) {
+    Write-Host "`nUsing App Registration: $ApplicationId" -ForegroundColor Yellow
+}
+else {
+    Write-Error "Either ApplicationId or (FunctionAppName and ResourceGroupName) must be provided"
+    exit 1
+}
+
+# Required API Permissions (Complete list for all Microsoft Defender products)
 $requiredPermissions = @{
     "Microsoft Graph" = @{
         AppId = "00000003-0000-0000-c000-000000000000"
         Permissions = @(
-            @{ Name = "SecurityEvents.Read.All"; Type = "Application" }
-            @{ Name = "SecurityAlert.Read.All"; Type = "Application" }
-            @{ Name = "IdentityRiskEvent.Read.All"; Type = "Application" }
-            @{ Name = "IdentityRiskyUser.Read.All"; Type = "Application" }
-            @{ Name = "User.Read.All"; Type = "Application" }
-            @{ Name = "AuditLog.Read.All"; Type = "Application" }
-            @{ Name = "Directory.Read.All"; Type = "Application" }
-            @{ Name = "SecurityActions.Read.All"; Type = "Application" }
-            @{ Name = "ThreatIndicators.Read.All"; Type = "Application" }
+            @{ Name = "SecurityEvents.Read.All"; Type = "Application"; Id = "bf394140-e372-4bf9-a898-299cfc7564e5" }
+            @{ Name = "SecurityActions.Read.All"; Type = "Application"; Id = "5e0edab9-c148-49d0-b423-ac253e121825" }
+            @{ Name = "IdentityRiskEvent.Read.All"; Type = "Application"; Id = "6e472fd1-ad78-48da-a0f0-97ab2c6b769e" }
+            @{ Name = "IdentityRiskyUser.Read.All"; Type = "Application"; Id = "dc5007c0-2d7d-4c42-879c-2dab87571379" }
+            @{ Name = "Directory.Read.All"; Type = "Application"; Id = "7ab1d382-f21e-4acd-a863-ba3e13f7da61" }
+            @{ Name = "User.Read.All"; Type = "Application"; Id = "df021288-bdef-4463-88db-98f22de89214" }
+            @{ Name = "Device.Read.All"; Type = "Application"; Id = "7438b122-aefc-4978-80ed-43db9fcc7715" }
+            @{ Name = "Application.Read.All"; Type = "Application"; Id = "9a5d68dd-52b0-4cc2-bd40-abcf44ac3a30" }
+            @{ Name = "AuditLog.Read.All"; Type = "Application"; Id = "b0afded3-3588-46d8-8b3d-9842eff778da" }
+            @{ Name = "SecurityAlert.Read.All"; Type = "Application"; Id = "45cc0394-e837-488b-a098-1918f48d186c" }
+            @{ Name = "ThreatIndicators.Read.All"; Type = "Application"; Id = "197ee4e9-b993-4066-898f-d6aecc55125b" }
         )
     }
-    "Microsoft Defender ATP" = @{
+    "Microsoft Defender for Endpoint" = @{
         AppId = "fc780465-2017-40d4-a0c5-307022471b92"
         Permissions = @(
-            @{ Name = "Machine.Read.All"; Type = "Application" }
-            @{ Name = "Alert.Read.All"; Type = "Application" }
-            @{ Name = "File.Read.All"; Type = "Application" }
-            @{ Name = "AdvancedQuery.Read.All"; Type = "Application" }
-            @{ Name = "Vulnerability.Read.All"; Type = "Application" }
+            @{ Name = "Machine.Read.All"; Type = "Application"; Id = "ea8291d3-4b9a-44b5-bc3a-6cea3026dc79" }
+            @{ Name = "Alert.Read.All"; Type = "Application"; Id = "3b14d7f8-5c27-4d2e-9e67-7b1b6b9f0b3a" }
+            @{ Name = "File.Read.All"; Type = "Application"; Id = "7734e8e5-8dde-42fc-b5ae-6eafea078693" }
+            @{ Name = "AdvancedQuery.Read.All"; Type = "Application"; Id = "b152f2ba-5d6d-4b0d-8c1e-1e0e4c1c1e0e" }
+            @{ Name = "Vulnerability.Read.All"; Type = "Application"; Id = "ea8291d3-4b9a-44b5-bc3a-6cea3026dc79" }
+        )
+    }
+    "Microsoft 365 Defender" = @{
+        AppId = "8ee8fdad-f234-4243-8f3b-15c294843740"
+        Permissions = @(
+            @{ Name = "AdvancedHunting.Read.All"; Type = "Application"; Id = "7734e8e5-8dde-42fc-b5ae-6eafea078693" }
+            @{ Name = "Incident.Read.All"; Type = "Application"; Id = "3b14d7f8-5c27-4d2e-9e67-7b1b6b9f0b3a" }
+        )
+    }
+    "Office 365 Management APIs" = @{
+        AppId = "c5393580-f805-4401-95e8-94b7a6ef2fc2"
+        Permissions = @(
+            @{ Name = "ActivityFeed.Read"; Type = "Application"; Id = "594c1fb6-4f81-4475-ae41-0c394909246c" }
+            @{ Name = "ServiceHealth.Read"; Type = "Application"; Id = "79c261e0-fe76-4144-aad5-bdc68fbe4037" }
         )
     }
     "Azure Service Management" = @{
         AppId = "797f4846-ba00-4fd7-ba43-dac1f8f63013"
         Permissions = @(
-            @{ Name = "user_impersonation"; Type = "Delegated" }
+            @{ Name = "user_impersonation"; Type = "Delegated"; Id = "41094075-9dad-400e-a0bd-54e686782033" }
         )
     }
 }
