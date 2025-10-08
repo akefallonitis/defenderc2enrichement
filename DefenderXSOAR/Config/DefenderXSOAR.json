@@ -1,0 +1,162 @@
+{
+  "Version": "1.0.0",
+  "Description": "DefenderXSOAR Configuration for Multi-Tenant MSSP Environments",
+  "Tenants": [
+    {
+      "TenantName": "Production",
+      "TenantId": "your-tenant-id-here",
+      "ClientId": "your-client-id-here",
+      "ClientSecret": "your-client-secret-here",
+      "SubscriptionId": "your-subscription-id-here",
+      "MCASUrl": "https://your-tenant.portal.cloudappsecurity.com",
+      "MCASToken": "your-mcas-api-token-here",
+      "Enabled": true
+    },
+    {
+      "TenantName": "Customer1",
+      "TenantId": "customer1-tenant-id",
+      "ClientId": "customer1-client-id",
+      "ClientSecret": "customer1-client-secret",
+      "SubscriptionId": "customer1-subscription-id",
+      "MCASUrl": "https://customer1.portal.cloudappsecurity.com",
+      "MCASToken": "customer1-mcas-token",
+      "Enabled": true
+    }
+  ],
+  "Azure": {
+    "DefaultSubscriptionId": "default-subscription-id"
+  },
+  "MCAS": {
+    "TenantUrl": "https://default.portal.cloudappsecurity.com",
+    "APIToken": "default-mcas-token"
+  },
+  "LogAnalytics": {
+    "Enabled": true,
+    "WorkspaceId": "your-workspace-id",
+    "SharedKey": "your-shared-key",
+    "CustomTableName": "DefenderXSOAR_CL",
+    "RetentionDays": 90
+  },
+  "ExternalWorkflows": {
+    "Enabled": false,
+    "WorkflowUrl": "https://your-logic-app-url",
+    "FunctionAppUrl": "https://your-function-app-url"
+  },
+  "Products": {
+    "MDE": {
+      "Enabled": true,
+      "Priority": 1
+    },
+    "MDC": {
+      "Enabled": true,
+      "Priority": 2
+    },
+    "MCAS": {
+      "Enabled": true,
+      "Priority": 3
+    },
+    "MDI": {
+      "Enabled": true,
+      "Priority": 4
+    },
+    "MDO": {
+      "Enabled": true,
+      "Priority": 5
+    },
+    "EntraID": {
+      "Enabled": true,
+      "Priority": 6
+    }
+  },
+  "RiskScoring": {
+    "Thresholds": {
+      "Critical": 80,
+      "High": 60,
+      "Medium": 40,
+      "Low": 20
+    },
+    "Weights": {
+      "MDE": 1.2,
+      "MDC": 1.0,
+      "MCAS": 1.1,
+      "MDI": 1.3,
+      "MDO": 1.0,
+      "EntraID": 1.2
+    }
+  },
+  "IncidentDecisions": {
+    "AutoEscalate": {
+      "Enabled": true,
+      "MinimumRiskScore": 80,
+      "RequiredThreatIntelCount": 3
+    },
+    "AutoClose": {
+      "Enabled": false,
+      "MaximumRiskScore": 10
+    },
+    "AutoMerge": {
+      "Enabled": true,
+      "SimilarityThreshold": 0.8
+    }
+  },
+  "Watchlists": {
+    "Enabled": true,
+    "Lists": [
+      {
+        "Name": "VIP Users",
+        "WorkspaceId": "workspace-id",
+        "Alias": "vip_users"
+      },
+      {
+        "Name": "Known Bad IPs",
+        "WorkspaceId": "workspace-id",
+        "Alias": "bad_ips"
+      },
+      {
+        "Name": "Approved Applications",
+        "WorkspaceId": "workspace-id",
+        "Alias": "approved_apps"
+      }
+    ]
+  },
+  "UEBA": {
+    "Enabled": true,
+    "BaselineDays": 30,
+    "AnomalyThreshold": 2.0
+  },
+  "Playbooks": {
+    "AutoExecute": false,
+    "DefaultPlaybooks": {
+      "MDE": [
+        "DeviceCompromiseDetection",
+        "MalwareAnalysis"
+      ],
+      "MDC": [
+        "SecurityPostureAnalysis",
+        "VulnerabilityAssessment"
+      ],
+      "MCAS": [
+        "CloudAppRiskAssessment",
+        "UserBehaviorAnalytics"
+      ],
+      "MDI": [
+        "IdentityCompromiseDetection",
+        "LateralMovementAnalysis"
+      ],
+      "MDO": [
+        "PhishingCampaignDetection",
+        "EmailSecurityAnalysis"
+      ],
+      "EntraID": [
+        "RiskySignInAnalysis",
+        "MFABypassAttempts"
+      ]
+    }
+  },
+  "Logging": {
+    "Level": "Information",
+    "ConsoleOutput": true,
+    "FileOutput": false,
+    "LogPath": "./Logs"
+  }
+}
