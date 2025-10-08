@@ -1,0 +1,146 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+    "handler": "Microsoft.Azure.CreateUIDef",
+    "version": "0.1.2-preview",
+    "parameters": {
+        "basics": [
+            {
+                "name": "defenderXSOARName",
+                "type": "Microsoft.Common.TextBox",
+                "label": "DefenderXSOAR Name",
+                "defaultValue": "DefenderXSOAR",
+                "toolTip": "Base name for all DefenderXSOAR resources",
+                "constraints": {
+                    "required": true,
+                    "regex": "^[a-zA-Z0-9-]{3,24}$",
+                    "validationMessage": "Name must be 3-24 characters and contain only alphanumeric characters and hyphens"
+                }
+            }
+        ],
+        "steps": [
+            {
+                "name": "sentinelConfig",
+                "label": "Sentinel Configuration",
+                "elements": [
+                    {
+                        "name": "sentinelWorkspaceSelector",
+                        "type": "Microsoft.Solutions.ResourceSelector",
+                        "label": "Select Sentinel Workspace",
+                        "resourceType": "Microsoft.OperationalInsights/workspaces",
+                        "options": {
+                            "filter": {
+                                "subscription": "onBasics",
+                                "location": "onBasics"
+                            }
+                        },
+                        "toolTip": "Select the Log Analytics workspace where Microsoft Sentinel is enabled"
+                    },
+                    {
+                        "name": "sentinelInfo",
+                        "type": "Microsoft.Common.InfoBox",
+                        "visible": true,
+                        "options": {
+                            "icon": "Info",
+                            "text": "DefenderXSOAR will integrate with this Sentinel workspace to enrich incidents and write custom tables."
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "authConfig",
+                "label": "Authentication Configuration",
+                "elements": [
+                    {
+                        "name": "authInfo",
+                        "type": "Microsoft.Common.InfoBox",
+                        "visible": true,
+                        "options": {
+                            "icon": "Info",
+                            "text": "For multi-tenant MSSP scenarios, provide an existing Azure AD App Registration. For single-tenant deployments, you can create one after deployment."
+                        }
+                    },
+                    {
+                        "name": "multiTenantAppId",
+                        "type": "Microsoft.Common.TextBox",
+                        "label": "Multi-Tenant App ID (Optional)",
+                        "defaultValue": "",
+                        "toolTip": "Application (Client) ID for multi-tenant authentication. Leave blank to configure later.",
+                        "constraints": {
+                            "required": false,
+                            "regex": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})?$",
+                            "validationMessage": "Must be a valid GUID or empty"
+                        }
+                    },
+                    {
+                        "name": "multiTenantAppSecret",
+                        "type": "Microsoft.Common.PasswordBox",
+                        "label": {
+                            "password": "App Secret (Optional)",
+                            "confirmPassword": "Confirm App Secret"
+                        },
+                        "toolTip": "Client secret for the multi-tenant app. Leave blank to configure later.",
+                        "constraints": {
+                            "required": false
+                        },
+                        "options": {
+                            "hideConfirmation": false
+                        },
+                        "visible": "[not(empty(steps('authConfig').multiTenantAppId))]"
+                    }
+                ]
+            },
+            {
+                "name": "functionConfig",
+                "label": "Function App Configuration",
+                "elements": [
+                    {
+                        "name": "functionAppSku",
+                        "type": "Microsoft.Common.DropDown",
+                        "label": "Function App SKU",
+                        "defaultValue": "Consumption (Y1)",
+                        "toolTip": "Select the hosting plan for the Function App. Consumption is recommended for most scenarios.",
+                        "constraints": {
+                            "required": true,
+                            "allowedValues": [
+                                {
+                                    "label": "Consumption (Y1)",
+                                    "value": "Y1"
+                                },
+                                {
+                                    "label": "Premium EP1",
+                                    "value": "EP1"
+                                },
+                                {
+                                    "label": "Premium EP2",
+                                    "value": "EP2"
+                                },
+                                {
+                                    "label": "Premium EP3",
+                                    "value": "EP3"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "name": "skuInfo",
+                        "type": "Microsoft.Common.InfoBox",
+                        "visible": true,
+                        "options": {
+                            "icon": "Info",
+                            "text": "Consumption plan is cost-effective for most scenarios. Premium plans provide VNet integration, unlimited execution time, and faster cold starts."
+                        }
+                    }
+                ]
+            }
+        ],
+        "outputs": {
+            "DefenderXSOARName": "[basics('defenderXSOARName')]",
+            "Location": "[location()]",
+            "SentinelWorkspaceName": "[last(split(steps('sentinelConfig').sentinelWorkspaceSelector.id, '/'))]",
+            "SentinelResourceGroupName": "[first(skip(split(steps('sentinelConfig').sentinelWorkspaceSelector.id, '/'), 4))]",
+            "MultiTenantAppId": "[steps('authConfig').multiTenantAppId]",
+            "MultiTenantAppSecret": "[steps('authConfig').multiTenantAppSecret]",
+            "FunctionAppSku": "[steps('functionConfig').functionAppSku]"
+        }
+    }
+}
