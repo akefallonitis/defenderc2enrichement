@@ -571,16 +571,138 @@ Request (HTTP Trigger)
 5. **Monitor unused resources**
 6. **Right-size Log Analytics ingestion**
 
+## Advanced Features (v2)
+
+### Unified Risk Scoring Engine
+
+DefenderXSOAR now includes a comprehensive unified risk scoring engine that combines multiple data sources:
+
+**Architecture**:
+```
+┌─────────────────────────────────────────────────────────┐
+│             Unified Risk Scorer                         │
+├─────────────────────────────────────────────────────────┤
+│  ┌───────────────┐  ┌──────────────┐  ┌─────────────┐ │
+│  │   Microsoft   │  │    STAT      │  │   Custom    │ │
+│  │   Native      │  │  Analytics   │  │   Scoring   │ │
+│  │   (35%)       │  │    (35%)     │  │    (30%)    │ │
+│  └───────┬───────┘  └──────┬───────┘  └──────┬──────┘ │
+│          │                 │                  │         │
+│          └─────────────────┼──────────────────┘         │
+│                            │                            │
+│              ┌─────────────▼─────────────┐             │
+│              │   Weighted Aggregation    │             │
+│              └─────────────┬─────────────┘             │
+│                            │                            │
+│              ┌─────────────▼─────────────┐             │
+│              │ Contextual Adjustments    │             │
+│              │ • After-hours boost       │             │
+│              │ • Critical asset boost    │             │
+│              └─────────────┬─────────────┘             │
+│                            │                            │
+│                ┌───────────▼──────────┐                │
+│                │  Final Risk Score    │                │
+│                │  Severity            │                │
+│                │  Confidence          │                │
+│                │  Explainability      │                │
+│                │  Recommendations     │                │
+│                └──────────────────────┘                │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Components**:
+
+1. **Microsoft Native Scores (35%)**
+   - Defender for Endpoint risk scores
+   - Defender for Cloud Secure Score
+   - Identity Protection risk levels
+   - Sentinel native severity
+   - MCAS risk scores
+
+2. **STAT Analytics (35%)**
+   - ML-like feature extraction
+   - Behavioral anomaly detection
+   - Temporal pattern analysis
+   - Geographic anomaly detection
+   - Alert correlation scoring
+
+3. **Custom Scoring (30%)**
+   - Existing weighted scoring
+   - Cross-product correlations
+   - Threat intelligence matches
+
+### Parallel Worker Execution
+
+Workers can now execute in parallel for improved performance:
+
+**Benefits**:
+- Reduced total enrichment time
+- Better resource utilization
+- Isolated failure handling
+- Configurable timeout per worker
+
+**Implementation**:
+```powershell
+$results = Invoke-ParallelWorkers `
+    -Entities $entities `
+    -Products @('MDE', 'MDC', 'MCAS', 'MDI', 'MDO', 'EntraID') `
+    -Tenant $tenant `
+    -IncidentId $incidentId
+```
+
+### Performance Optimization Features
+
+**CacheManager**:
+- In-memory caching with TTL
+- Configurable expiration times
+- Automatic cache invalidation
+- Reduces redundant API calls
+
+**CircuitBreaker**:
+- Prevents cascading failures
+- Automatic recovery attempts
+- Configurable failure thresholds
+- Half-open state testing
+
+**QueryOptimizer**:
+- KQL query optimization
+- Query batching
+- Performance hints
+
+**Progressive Enrichment**:
+- Adaptive timeouts
+- Priority-based execution
+- Graceful degradation
+- Time-bounded operations
+
+### Enhanced Scoring Algorithms
+
+**ML-like Feature Extraction**:
+- Alert count features (logarithmic scaling)
+- Alert severity averaging
+- Entity risk aggregation
+- Threat intel categorization
+- Behavioral pattern detection
+- Temporal concentration analysis
+- Geographic distribution analysis
+
+**Confidence Calculation**:
+- Score agreement analysis (variance-based)
+- Data completeness factors
+- Multi-source validation
+
 ## Future Enhancements
 
 ### Roadmap Items
 
 - **Real-time streaming** with Event Grid
-- **Machine learning** risk scoring models
+- **Machine learning** risk scoring models (Enhanced STAT analytics)
 - **Graph-based** attack chain visualization
 - **Mobile app** for incident response
 - **Kubernetes deployment** option
 - **On-premises** data connector
+- **Base worker class pattern** for modular development
+- **Progressive enrichment** with adaptive timeouts
 
 ## References
 

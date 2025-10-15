@@ -68,6 +68,26 @@
       "Priority": 6
     }
   },
+  "UnifiedRiskScoring": {
+    "Enabled": true,
+    "ScoringWeights": {
+      "Microsoft": 0.35,
+      "STAT": 0.35,
+      "Custom": 0.30
+    },
+    "DynamicWeightAdjustment": {
+      "Enabled": true
+    },
+    "ConfidenceThresholds": {
+      "High": 0.8,
+      "Medium": 0.6,
+      "Low": 0.4
+    },
+    "ContextualAdjustments": {
+      "AfterHoursBoost": 1.15,
+      "CriticalAssetBoost": 1.25
+    }
+  },
   "RiskScoring": {
     "Thresholds": {
       "Critical": 80,

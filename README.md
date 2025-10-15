@@ -17,11 +17,13 @@ Deploy DefenderXSOAR to Azure in minutes with our one-click deployment:
 DefenderXSOAR is a comprehensive orchestration platform that:
 - **Integrates** all Microsoft Defender products (MDE, MDC, MCAS, MDI, MDO, Entra ID)
 - **Normalizes** entities across different security products using official Microsoft Sentinel entity schemas
-- **Calculates** risk scores using advanced algorithms
-- **Automates** incident response decisions
+- **Calculates** risk scores using a unified scoring engine (Microsoft + STAT + Custom)
+- **Automates** incident response decisions with ML-like analytics
 - **Supports** multi-tenant MSSP scenarios
 - **Provides** production-ready hunting playbooks with real KQL queries
 - **Uses** direct Microsoft API calls (no Logic Apps connectors required)
+- **Executes** workers in parallel for improved performance
+- **Implements** circuit breaker patterns for resilience
 
 ## 🏗️ Architecture
 
@@ -32,7 +34,8 @@ DefenderXSOAR/
 │   ├── Common/
 │   │   ├── AuthenticationHelper.psm1   # Multi-tenant auth
 │   │   ├── EntityNormalizer.psm1       # Entity unification
-│   │   └── DataTableManager.psm1       # Log Analytics integration
+│   │   ├── DataTableManager.psm1       # Log Analytics integration
+│   │   └── UnifiedRiskScorer.psm1      # ⭐ NEW: Unified risk scoring engine
 │   ├── Workers/
 │   │   ├── MDEWorker.psm1              # Microsoft Defender for Endpoint
 │   │   ├── MDCWorker.psm1              # Microsoft Defender for Cloud
@@ -134,8 +137,14 @@ DefenderXSOAR/
 - Support for: Users, Devices, IPs, Files, URLs, Processes, Emails, Cloud Apps, Azure Resources
 - Automatic entity correlation and deduplication
 
-#### Risk Scoring
-- Product-weighted risk calculation
+#### Risk Scoring (⭐ Enhanced with Unified Scoring)
+- **Unified Risk Scoring Engine**: Combines Microsoft native scores (35%), STAT analytics (35%), and custom scoring (30%)
+- **ML-like Feature Extraction**: Behavioral patterns, temporal analysis, geographic anomalies
+- **Confidence Scoring**: Score agreement validation and data completeness checks
+- **Contextual Adjustments**: After-hours boost, critical asset boost
+- **Explainability**: Detailed breakdown of scoring factors and top contributors
+- **Actionable Recommendations**: Risk-based guidance for incident response
+- Product-weighted risk calculation (fallback mode)
 - Threat intelligence integration
 - UEBA behavioral analysis
 - Configurable thresholds and weights

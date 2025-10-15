@@ -17,6 +17,7 @@ Import-Module (Join-Path $CommonPath "AuthenticationHelper.psm1") -Force
 Import-Module (Join-Path $CommonPath "EntityNormalizer.psm1") -Force
 Import-Module (Join-Path $CommonPath "DataTableManager.psm1") -Force
 Import-Module (Join-Path $CommonPath "CrossCorrelationEngine.psm1") -Force
+Import-Module (Join-Path $CommonPath "UnifiedRiskScorer.psm1") -Force
 
 # Import Enrichment modules
 Import-Module (Join-Path $EnrichmentPath "ThreatIntelEnrichment.psm1") -Force
@@ -270,8 +271,46 @@ function Start-DefenderXSOAREnrichment {
             Write-Warning "  ✗ Cross-product correlation failed: $_"
         }
         
-        # Calculate final risk score and severity
-        $consolidatedResults = Invoke-RiskScoring -Results $consolidatedResults
+        # Apply Unified Risk Scoring if enabled
+        if ($script:Config.UnifiedRiskScoring.Enabled -eq $true) {
+            Write-Host "`n=== Applying Unified Risk Scoring ===" -ForegroundColor Cyan
+            try {
+                $unifiedScorer = New-UnifiedRiskScorer -Configuration $script:Config
+                $incidentData = @{
+                    IncidentId = $IncidentId
+                    IncidentArmId = $IncidentArmId
+                    Severity = $consolidatedResults.Severity
+                }
+                
+                $riskAssessment = $unifiedScorer.CalculateUnifiedRiskScore($incidentData, $Entities, $consolidatedResults)
+                
+                # Apply unified risk score results
+                $consolidatedResults.RiskScore = $riskAssessment.FinalScore
+                $consolidatedResults.Severity = $riskAssessment.Severity
+                $consolidatedResults.RiskConfidence = $riskAssessment.Confidence
+                $consolidatedResults.RiskExplainability = $riskAssessment.Explainability
+                $consolidatedResults.Recommendations += $riskAssessment.Recommendations
+                
+                Write-Host "Unified Risk Assessment:" -ForegroundColor Yellow
+                Write-Host "  Final Score: $($riskAssessment.FinalScore)/100" -ForegroundColor Yellow
+                Write-Host "  Severity: $($riskAssessment.Severity)" -ForegroundColor Yellow
+                Write-Host "  Confidence: $([Math]::Round($riskAssessment.Confidence * 100, 0))%" -ForegroundColor Yellow
+                Write-Host "  Microsoft Score: $($riskAssessment.ComponentScores.Microsoft)" -ForegroundColor Gray
+                Write-Host "  STAT Score: $($riskAssessment.ComponentScores.STAT)" -ForegroundColor Gray
+                Write-Host "  Custom Score: $($riskAssessment.ComponentScores.Custom)" -ForegroundColor Gray
+                
+                Write-Host "  ✓ Unified risk scoring completed" -ForegroundColor Green
+            }
+            catch {
+                Write-Warning "  ✗ Unified risk scoring failed: $_"
+                # Fall back to original risk scoring
+                $consolidatedResults = Invoke-RiskScoring -Results $consolidatedResults
+            }
+        }
+        else {
+            # Calculate final risk score and severity using original method
+            $consolidatedResults = Invoke-RiskScoring -Results $consolidatedResults
+        }
         
         # Make incident decision
         $decision = Invoke-IncidentDecision -Results $consolidatedResults
@@ -543,6 +582,137 @@ function Invoke-ExternalWorkflow {
     }
 }
 
+function Invoke-ParallelWorkers {
+    <#
+    .SYNOPSIS
+        Executes workers in parallel for improved performance
+    .PARAMETER Entities
+        Array of entities to enrich
+    .PARAMETER Products
+        Array of products to query in parallel
+    .PARAMETER Tenant
+        Tenant configuration object
+    .PARAMETER IncidentId
+        Incident identifier
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [array]$Entities,
+        
+        [Parameter(Mandatory = $true)]
+        [string[]]$Products,
+        
+        [Parameter(Mandatory = $true)]
+        [object]$Tenant,
+        
+        [Parameter(Mandatory = $true)]
+        [string]$IncidentId
+    )
+    
+    Write-Host "Executing workers in parallel mode..." -ForegroundColor Cyan
+    
+    $jobs = @()
+    $results = @{}
+    
+    # Start parallel jobs for each product
+    foreach ($product in $Products) {
+        Write-Verbose "Starting parallel job for $product"
+        
+        $job = Start-Job -ScriptBlock {
+            param($ProductName, $EntitiesParam, $TenantParam, $IncidentIdParam, $ModulePath)
+            
+            try {
+                # Import required modules in job context
+                $CommonPath = Join-Path $ModulePath "Common"
+                $WorkersPath = Join-Path $ModulePath "Workers"
+                
+                Import-Module (Join-Path $CommonPath "AuthenticationHelper.psm1") -Force
+                Import-Module (Join-Path $CommonPath "EntityNormalizer.psm1") -Force
+                Import-Module (Join-Path $WorkersPath "$($ProductName)Worker.psm1") -Force
+                
+                # Execute product enrichment
+                switch ($ProductName) {
+                    'MDE' {
+                        $token = Get-SecurityCenterToken -TenantId $TenantParam.TenantId -ClientId $TenantParam.ClientId -ClientSecret $TenantParam.ClientSecret
+                        $result = Start-MDEEnrichment -Entities $EntitiesParam -AccessToken $token -IncidentId $IncidentIdParam
+                    }
+                    'MDC' {
+                        $token = Get-AzureManagementToken -TenantId $TenantParam.TenantId -ClientId $TenantParam.ClientId -ClientSecret $TenantParam.ClientSecret
+                        $subscriptionId = $TenantParam.SubscriptionId
+                        $result = Start-MDCEnrichment -Entities $EntitiesParam -SubscriptionId $subscriptionId -AccessToken $token -IncidentId $IncidentIdParam
+                    }
+                    'MCAS' {
+                        $tenantUrl = $TenantParam.MCASUrl
+                        $apiToken = $TenantParam.MCASToken
+                        $result = Start-MCASEnrichment -Entities $EntitiesParam -TenantUrl $tenantUrl -AccessToken $apiToken -IncidentId $IncidentIdParam
+                    }
+                    'MDI' {
+                        $token = Get-GraphAPIToken -TenantId $TenantParam.TenantId -ClientId $TenantParam.ClientId -ClientSecret $TenantParam.ClientSecret
+                        $result = Start-MDIEnrichment -Entities $EntitiesParam -AccessToken $token -IncidentId $IncidentIdParam
+                    }
+                    'MDO' {
+                        $token = Get-GraphAPIToken -TenantId $TenantParam.TenantId -ClientId $TenantParam.ClientId -ClientSecret $TenantParam.ClientSecret
+                        $result = Start-MDOEnrichment -Entities $EntitiesParam -AccessToken $token -IncidentId $IncidentIdParam
+                    }
+                    'EntraID' {
+                        $token = Get-GraphAPIToken -TenantId $TenantParam.TenantId -ClientId $TenantParam.ClientId -ClientSecret $TenantParam.ClientSecret
+                        $result = Start-EntraIDEnrichment -Entities $EntitiesParam -AccessToken $token -IncidentId $IncidentIdParam
+                    }
+                }
+                
+                return @{
+                    Product = $ProductName
+                    Success = $true
+                    Result = $result
+                }
+            }
+            catch {
+                return @{
+                    Product = $ProductName
+                    Success = $false
+                    Error = $_.Exception.Message
+                }
+            }
+        } -ArgumentList $product, $Entities, $Tenant, $IncidentId, $ModulePath
+        
+        $jobs += @{
+            Product = $product
+            Job = $job
+        }
+    }
+    
+    # Wait for all jobs to complete with timeout
+    $timeout = 300  # 5 minutes
+    $completed = Wait-Job -Job ($jobs.Job) -Timeout $timeout
+    
+    # Collect results
+    foreach ($jobInfo in $jobs) {
+        try {
+            $jobResult = Receive-Job -Job $jobInfo.Job -ErrorAction Stop
+            
+            if ($jobResult.Success) {
+                $results[$jobInfo.Product] = $jobResult.Result
+                Write-Host "  ✓ $($jobInfo.Product) enrichment completed (parallel)" -ForegroundColor Green
+            }
+            else {
+                Write-Warning "  ✗ $($jobInfo.Product) enrichment failed: $($jobResult.Error)"
+                $results[$jobInfo.Product] = $null
+            }
+        }
+        catch {
+            Write-Warning "  ✗ $($jobInfo.Product) enrichment failed: $_"
+            $results[$jobInfo.Product] = $null
+        }
+        finally {
+            Remove-Job -Job $jobInfo.Job -Force -ErrorAction SilentlyContinue
+        }
+    }
+    
+    Write-Host "Parallel execution completed" -ForegroundColor Green
+    return $results
+}
+
 # Export module members
 Export-ModuleMember -Function @(
     'Initialize-DefenderXSOARBrain',
@@ -550,5 +720,6 @@ Export-ModuleMember -Function @(
     'Invoke-ProductEnrichment',
     'Invoke-RiskScoring',
     'Invoke-IncidentDecision',
-    'Invoke-ExternalWorkflow'
+    'Invoke-ExternalWorkflow',
+    'Invoke-ParallelWorkers'
 )
