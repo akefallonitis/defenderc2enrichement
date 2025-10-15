@@ -456,7 +456,12 @@ class UnifiedRiskScorer {
             $count++
         }
         
-        return if ($count -gt 0) { $score / $count } else { 0 }
+        if ($count -gt 0) {
+            return $score / $count
+        }
+        else {
+            return 0
+        }
     }
     
     [double] CalculateSTATScore([object[]]$Entities, [hashtable]$EnrichmentResults) {
