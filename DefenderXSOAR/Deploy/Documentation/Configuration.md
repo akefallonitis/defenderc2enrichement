@@ -167,7 +167,66 @@ Enable or disable individual Defender products:
 
 ## Risk Scoring Configuration
 
-Configure risk scoring thresholds and weights:
+### Unified Risk Scoring (New)
+
+DefenderXSOAR now includes a unified risk scoring engine that combines Microsoft native scores, STAT-like analytics, and custom scoring into a comprehensive risk assessment.
+
+```json
+{
+  "UnifiedRiskScoring": {
+    "Enabled": true,
+    "ScoringWeights": {
+      "Microsoft": 0.35,
+      "STAT": 0.35,
+      "Custom": 0.30
+    },
+    "DynamicWeightAdjustment": {
+      "Enabled": true
+    },
+    "ConfidenceThresholds": {
+      "High": 0.8,
+      "Medium": 0.6,
+      "Low": 0.4
+    },
+    "ContextualAdjustments": {
+      "AfterHoursBoost": 1.15,
+      "CriticalAssetBoost": 1.25
+    }
+  }
+}
+```
+
+#### Unified Scoring Components
+
+- **Microsoft Native (35%)**: Combines Defender for Endpoint, Cloud, Identity Protection, Secure Score, and Sentinel severity
+- **STAT Analytics (35%)**: ML-like behavioral patterns, attack chains, temporal analysis, and anomaly detection
+- **Custom Scoring (30%)**: Existing weighted scoring and cross-product correlations
+
+#### Configuration Parameters
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| Enabled | Enable unified risk scoring | `true` |
+| Microsoft | Weight for Microsoft native scores | `0.35` |
+| STAT | Weight for STAT analytics | `0.35` |
+| Custom | Weight for custom scoring | `0.30` |
+| DynamicWeightAdjustment | Adjust weights based on confidence | `true` |
+| AfterHoursBoost | Multiplier for after-hours incidents | `1.15` |
+| CriticalAssetBoost | Multiplier for critical asset incidents | `1.25` |
+
+#### Output Format
+
+The unified risk scorer provides:
+- **FinalScore**: Unified risk score (0-100)
+- **Severity**: Critical, High, Medium, Low, Informational
+- **Confidence**: Score confidence (0-1)
+- **ComponentScores**: Breakdown by Microsoft, STAT, and Custom
+- **Explainability**: Detailed breakdown of scoring factors
+- **Recommendations**: Actionable recommendations based on risk
+
+### Traditional Risk Scoring
+
+Configure traditional risk scoring thresholds and weights (used when UnifiedRiskScoring is disabled):
 
 ```json
 {
