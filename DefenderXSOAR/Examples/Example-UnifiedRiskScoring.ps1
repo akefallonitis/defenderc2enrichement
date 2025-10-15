@@ -206,9 +206,16 @@ $enrichmentResults = @{
     }
 }
 
+# Define entities for this incident
+$incidentEntities = @(
+    @{ Name = "user-compromised@contoso.com"; Type = "Account"; Priority = "Critical"; Location = "US" }
+    @{ Name = "workstation-01.contoso.com"; Type = "Host"; Priority = "High"; Location = "US" }
+    @{ Name = "192.168.1.100"; Type = "IP"; Priority = "Medium"; Location = "US" }
+)
+
 # Calculate unified risk score
 Write-Host "`nCalculating unified risk score..." -ForegroundColor Cyan
-$riskAssessment = $unifiedScorer.CalculateUnifiedRiskScore($incidentData, $entities, $enrichmentResults)
+$riskAssessment = $unifiedScorer.CalculateUnifiedRiskScore($incidentData, $incidentEntities, $enrichmentResults)
 
 # Display results
 Write-Host "`n╔═══════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
@@ -252,13 +259,13 @@ $entitiesForEnrichment = @(
     @{ Name = "entity5"; Type = "URL"; Priority = "Low" }
 )
 
-Write-Host "Executing progressive enrichment with 30 second time limit..." -ForegroundColor Gray
 $progressiveConfig = @{
-    TimeLimit = 30
     PriorityOrder = @("Critical", "High", "Medium", "Low")
 }
 
-$progressiveResults = $progressiveManager.ExecuteProgressive($entitiesForEnrichment, 30, $progressiveConfig)
+$timeLimit = 30
+Write-Host "Executing progressive enrichment with $timeLimit second time limit..." -ForegroundColor Gray
+$progressiveResults = $progressiveManager.ExecuteProgressive($entitiesForEnrichment, $timeLimit, $progressiveConfig)
 Write-Host "Progressive enrichment completed in $([Math]::Round($progressiveResults.TimeElapsed, 2)) seconds" -ForegroundColor Green
 Write-Host "  Completed: $($progressiveResults.Completed.Count)" -ForegroundColor Green
 Write-Host "  Partial:   $($progressiveResults.Partial.Count)" -ForegroundColor Yellow
